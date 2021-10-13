@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>images generate h.264 mp4</title>
+</head>
+<body>
+<canvas width="256" height="256" id="canvas256"></canvas>
+<canvas width="512" height="512" id="canvas512"></canvas>
+<p>================</p>
+<video id="video256" controls autoplay muted></video>
+<video id="video512" controls autoplay muted></video>
+<script type="module">
+import { simd } from "./h264/wasm-feature-detect.js";
+
+
+function base64ToImageData (base64Img, width, height) {
+  let canvas = new OffscreenCanvas(width, height);
+  let ctx = canvas.getContext('2d');
+  let img = new Image(width, height);
+  img.src = base64Img;
+  ctx.drawImage(img, 0, 0, width, height);
+  return ctx.getImageData(0, 0, width, height).data;
+}
+
+async function getImageData(size) {
+  return new Promise(resolve => {
+    let ctx = document.getElementById(`canvas${size}`).getContext('2d');
+    let img = new Image();
+    img.src = './test.png';
+    img.onload = function() {
+      let canvas = ctx.canvas;
+      // , 0, 0, 256, 256
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      img.onload = null;
+      resolve(ctx.getImageData(0,0,canvas.width,canvas.height).data);
+    };
+  })
+}
+
+const h264Tool = (async () => {
+	const simdSupported = await simd();
+
+	console.log("Loading wasm...");
+  let Module = await import(
+    simdSupported
+      ? "../h264/simd/h264-mp4-encoder.js"
+      : "../h264/no-simd/h264-mp4-encoder.js"
+  );
+  const hme = await Module.default();
+  console.log("Done loading wasm");
+
+
+  const format = "rgba"; // todo: support RGB on windows
+  const channels = format === "rgba" ? 4 : 3;
+  let encoderStart = null;
+  let encoder = null;
+
+  return {
+    init (options) {
+      options = options || {};
+
+      encoderStart = performance.now();
+
+      encoder = new hme.H264MP4Encoder();
+      encoder.FS = hme.FS;
+      // Must be a multiple of 2.
+      encoder.width = options.width || 256;
+      encoder.height = options.height || 256;
+      encoder.sequential = true;
+      encoder.fragmentation = true;
+      encoder.quantizationParameter = 10;
+      encoder.speed = 10; // adjust to taste
+      encoder.frameRate = options.fps || 24;
+      // encoder.groupOfPictures = fps; // adjust to taste
+      encoder.debug = false;
+
+      console.log("Configuration:");
+      console.log("SIMD Support?", simdSupported);
+      console.log("Pixel Format:", format);  
+      console.log("Dimensions: %d x %d", encoder.width, encoder.height);
+      console.log("FPS:", encoder.frameRate);
+
+      console.time("encoder");
+
+      encoder.initialize();
+      return this;
+    },
+    addFrame (pixels) {
+      if (channels === 4) encoder.addFrameRgba(pixels);
+      else encoder.addFrameRgb(pixels);
+    },
+    finalize () {
+      encoder.finalize();
+      const uint8Array = encoder.FS.readFile(encoder.outputFilename);
+      const buf = uint8Array.buffer;
+
+      const time = Math.floor(performance.now() - encoderStart);
+      console.timeEnd("encoder");
+
+      console.log(`Finished Encoding in ${time} milliseconds`);
+      encoder.delete();
+
+      return new Blob([buf], { type: "video/mp4" });
+      
+    }
+  };
+
+});
+
+(async () => {
+  let imgPixels = await getImageData('256');
+
+  let mp4 = await h264Tool();
+  mp4.init({
+    width: 256,
+    height: 256,
+    fps: 24
+  });
+  let arr = new Array(120);
+  for (let i = arr.length - 1; i >= 0; i--) {
+    mp4.addFrame(imgPixels);
+  }
+
+  let tmpBlob = mp4.finalize();
+  let url = URL.createObjectURL(tmpBlob);
+  console.log('[blobURL]', url);
+  document.getElementById('video256').src = url;
+
+  imgPixels = await getImageData('512');
+  mp4.init({
+    width: 512,
+    height: 512,
+    fps: 24
+  });
+  arr = new Array(300);
+  for (let i = arr.length - 1; i >= 0; i--) {
+    mp4.addFrame(imgPixels);
+  }
+
+  tmpBlob = mp4.finalize();
+  url = URL.createObjectURL(tmpBlob);
+  console.log('[blobURL]', url);
+  document.getElementById('video512').src = url;
+})();
+
+</script>
+</body>
+</html>

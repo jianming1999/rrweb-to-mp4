@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="stylesheet"
+      href="rrweb.min.css"
+    />
+    <script src="rrweb.min.js"></script>
+    <script src="lz-string.js"></script>
+    <!-- <script src="webm-writer.js"></script> -->
+    <title>Document</title>
+  </head>
+  <body>
+    <script type="module">
+      import { simd } from "./h264/wasm-feature-detect.js";
+      let config = {
+        width: 480,
+        height: 800,
+        fps: 30
+      };
+
+      function base64ToImageData (base64Img, width, height) {
+        let canvas = new OffscreenCanvas(width, height);
+        let ctx = canvas.getContext('2d');
+        let img = new Image(width, height);
+        img.src = base64Img;
+        ctx.drawImage(img, 0, 0, width, height);
+        return ctx.getImageData(0, 0, width, height).data;
+      }
+
+      const h264Tool = (async () => {
+        const simdSupported = await simd();
+
+        console.log("Loading wasm...");
+        let Module = await import(
+          simdSupported
+            ? "../h264/simd/h264-mp4-encoder.js"
+            : "../h264/no-simd/h264-mp4-encoder.js"
+        );
+        const hme = await Module.default();
+        console.log("Done loading wasm");
+
+
+        const format = "rgba"; // todo: support RGB on windows
+        const channels = format === "rgba" ? 4 : 3;
+        let encoderStart = null;
+        let encoder = null;
+
+        return {
+          init (options) {
+            options = options || {};
+
+            encoderStart = performance.now();
+
+            encoder = new hme.H264MP4Encoder();
+            encoder.FS = hme.FS;
+            // Must be a multiple of 2.
+            encoder.width = options.width || 256;
+            encoder.height = options.height || 256;
+            encoder.sequential = true;
+            encoder.fragmentation = true;
+            encoder.quantizationParameter = 10;
+            encoder.speed = 10; // 10 adjust to taste
+            encoder.frameRate = options.fps || 24;
+            // encoder.groupOfPictures = fps; // adjust to taste
+            encoder.debug = false;
+
+            console.log("Configuration:");
+            console.log("SIMD Support?", simdSupported);
+            console.log("Pixel Format:", format);  
+            console.log("Dimensions: %d x %d", encoder.width, encoder.height);
+            console.log("FPS:", encoder.frameRate);
+
+            console.time("encoder");
+
+            encoder.initialize();
+            return this;
+          },
+          addFrame (pixels) {
+            if (channels === 4) encoder.addFrameRgba(pixels);
+            else encoder.addFrameRgb(pixels);
+          },
+          finalize () {
+            encoder.finalize();
+            const uint8Array = encoder.FS.readFile(encoder.outputFilename);
+            const buf = uint8Array.buffer;
+
+            const time = Math.floor(performance.now() - encoderStart);
+            console.timeEnd("encoder");
+
+            console.log(`Finished Encoding in ${time} milliseconds`);
+            encoder.delete();
+
+            return new Blob([buf], { type: "video/mp4" });            
+          }
+        };
+      });
+      let mp4 = null;
+      // var videoWriter = new WebMWriter({
+      //   frameRate: 30,
+      //   fileWriter: null
+      // });
+
+      window.addFrame = function (webmBase64) {
+        mp4.addFrame(base64ToImageData(webmBase64, config.width, config.height));
+        // videoWriter.addFrame(webmBase64);
+      }
+
+      window.onload = function () {
+        h264Tool().then((res) => {
+          mp4 = res;
+          window.pageLoaded();
+        })
+      };      
+      window.replay = function(events) {
+        window.chromePlayer = new rrweb.Replayer(events);
+        config.width = events[0].data.width;
+        config.height = events[0].data.height;
+        mp4.init(config);
+        let started = false;
+        window.chromePlayer.on("start", (payload) => {
+          if (started === false) {
+            console.log("播放开始");
+            started = true;            
+            window.replayStart();
+          }
+        });
+        let index = 0;
+        window.chromePlayer.on("pause", (payload) => {
+          console.log("暂停------", index++);
+        });
+        window.chromePlayer.on("finish", (payload) => {
+          console.log("播放结束");
+          const mp4Blob = mp4.finalize();
+          // const url = URL.createObjectURL(mp4Blob);
+          // console.log('[blobURL]', url);
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+
+          // videoWriter.complete().then((webMBlob) => {
+          //   var formData = new FormData();            
+          //   formData.append('file', webMBlob);
+          //   return fetch(location.origin + '/uploadWebm', {method: 'POST',body: formData});
+          // }).then(res => {
+            var formData = new FormData();            
+            formData.append('file', mp4Blob);
+            // return 
+            fetch(location.origin + '/uploadMp4', {method: 'POST',body: formData});            
+          // }).then(() => {
+            window.replayEnd();
+          // })
+        });
+
+        window.chromePlayer.play();
+      }
+    </script>
+  </body>
+</html>

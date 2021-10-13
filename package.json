@@ -1,0 +1,24 @@
+{
+  "name": "rrweb-to-mp4",
+  "version": "1.0.0",
+  "description": "rrweb 原始数据转成webm视频",
+  "main": "index.js",
+  "scripts": {
+    "build": "rollup -c",
+    "test": "node test/index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "code-style-cli": "0.0.12",
+    "cwebp": "^2.0.5",
+    "express": "^4.17.1",
+    "multer": "^1.4.3",
+    "node-blob": "0.0.2",
+    "progress": "^2.0.3",
+    "puppeteer": "^5.5.0"
+  },
+  "devDependencies": {
+    "rollup": "^2.35.1"
+  }
+}
