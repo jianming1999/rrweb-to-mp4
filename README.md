@@ -1,5 +1,5 @@
-# rrweb-to-webm
-rrweb-to-webm 是一个可以将 rrweb 录制的原始数据转换为webm视频的项目。本项目是基于rrweb-to-video项目修改的，去掉了ffmpeg的依赖，改为webm视频格式导出
+# rrweb-to-mp4
+rrweb-to-mp4 是一个可以将 rrweb 录制的原始数据转换为mp4视频的项目。本项目是基于rrweb-to-video项目修改的，去掉了ffmpeg的依赖，改为mp4视频格式导出
 
 ## 背景
 rrweb 录制的原始数据为 json 格式，json 里会保存页面中的一些静态资源，如图片、css等。  
