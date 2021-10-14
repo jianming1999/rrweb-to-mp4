@@ -11,12 +11,12 @@
   "license": "ISC",
   "dependencies": {
     "code-style-cli": "0.0.12",
-    "cwebp": "^2.0.5",
     "express": "^4.17.1",
     "multer": "^1.4.3",
     "node-blob": "0.0.2",
     "progress": "^2.0.3",
-    "puppeteer": "^5.5.0"
+    "puppeteer": "^5.5.0",
+    "zlib": "^1.0.5"
   },
   "devDependencies": {
     "rollup": "^2.35.1"
